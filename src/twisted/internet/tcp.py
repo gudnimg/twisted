@@ -30,7 +30,6 @@ from twisted.internet.interfaces import (
     ITCPTransport,
 )
 from twisted.logger import ILogObserver, LogEvent, Logger
-from twisted.python import deprecate, versions
 from twisted.python.compat import lazyByteSlice
 from twisted.python.runtime import platformType
 
@@ -231,7 +230,7 @@ class Connection(
         """Return the socket for this connection."""
         return self.socket
 
-    def doRead(self):
+    def doRead(self) -> Union[error.ConnectionDone, error.ConnectionLost, None]:
         """Calls self.protocol.dataReceived with all available data.
 
         This reads up to self.bufferSize bytes of data from its socket, then
@@ -243,29 +242,20 @@ class Connection(
             data = self.socket.recv(self.bufferSize)
         except OSError as se:
             if se.args[0] == EWOULDBLOCK:
-                return
+                return None
             else:
                 return main.CONNECTION_LOST
 
         return self._dataReceived(data)
 
-    def _dataReceived(self, data):
+    def _dataReceived(self, data: bytes) -> Union[error.ConnectionDone, None]:
         if not data:
+            # An empty bytes object indicates that the client has disconnected.
             return main.CONNECTION_DONE
-        rval = self.protocol.dataReceived(data)
-        if rval is not None:
-            offender = self.protocol.dataReceived
-            warningFormat = (
-                "Returning a value other than None from %(fqpn)s is "
-                "deprecated since %(version)s."
-            )
-            warningString = deprecate.getDeprecationWarningString(
-                offender, versions.Version("Twisted", 11, 0, 0), format=warningFormat
-            )
-            deprecate.warnAboutFunction(offender, warningString)
-        return rval
+        self.protocol.dataReceived(data)
+        return None
 
-    def writeSomeData(self, data):
+    def writeSomeData(self, data: bytes) ->  Union[error.ConnectionLost, int]:
         """
         Write as much as possible of the given data to this TCP connection.
 
