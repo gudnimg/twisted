@@ -33,7 +33,6 @@ from twisted.internet.interfaces import (
     IProtocolNegotiationFactory,
 )
 from twisted.internet.task import Clock
-from twisted.python.compat import nativeString
 from twisted.python.failure import Failure
 from twisted.python.filepath import FilePath
 from twisted.python.modules import getModule
@@ -134,22 +133,51 @@ def counter(counter=itertools.count()):
     return next(counter)
 
 
-def makeCertificate(**kw):
-    keypair = PKey()
-    keypair.generate_key(TYPE_RSA, 2048)
+@cache
+def _keyPair(role: bytes) -> sslverify.KeyPair:
+    """
+    Generate one RSA-2048 key pair for a certificate common name.
+    The role parameter used to provide a unique identifier for the cache.
+    """
+    return sslverify.KeyPair.generate(kind=TYPE_RSA, size=2048)
 
-    certificate = X509()
-    certificate.gmtime_adj_notBefore(0)
-    certificate.gmtime_adj_notAfter(60 * 60 * 24 * 365)  # One year
-    for xname in certificate.get_issuer(), certificate.get_subject():
-        for k, v in kw.items():
-            setattr(xname, k, nativeString(v))
 
-    certificate.set_serial_number(counter())
-    certificate.set_pubkey(keypair)
-    certificate.sign(keypair, "md5")
+@cache
+def _authorityKey(role: str) -> RSAPrivateKey:
+    """
+    Generate one RSA-4096 private key for an authority, client or server.
+    The role parameter used to provide a unique identifier for the cache.
+    """
+    return generate_private_key(
+        public_exponent=65537,
+        key_size=4096,
+        backend=default_backend(),
+    )
 
-    return keypair, certificate
+
+@cache
+def _certificateData(keyPair: sslverify.KeyPair, **fields: str | bytes) -> bytes:
+    """
+    Create and cache certificate data.
+    """
+    distinguishedName = sslverify.DistinguishedName(**fields)
+    certificateRequest = keyPair.requestObject(distinguishedName)
+    certificate = keyPair.signRequestObject(
+        distinguishedName,
+        certificateRequest,
+        counter(),
+    )
+
+    return certificate.dump()  # type: ignore[no-any-return]
+
+
+def makeCertificate(**kw: str | bytes) -> tuple[PKey, X509]:
+    distinguishedName = sslverify.DistinguishedName(**kw)
+    keyPair = _keyPair(distinguishedName.commonName)
+
+    certificate = keyPair.newCertificate(_certificateData(keyPair, **kw))
+
+    return keyPair.original, certificate.original
 
 
 oneDay = datetime.timedelta(1, 0, 0)
