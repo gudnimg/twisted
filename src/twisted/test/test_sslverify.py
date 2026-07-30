@@ -14,6 +14,7 @@ import itertools
 import textwrap
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from functools import cache
 from typing import Any
 from weakref import ref
 
