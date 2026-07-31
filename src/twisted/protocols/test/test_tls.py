@@ -49,8 +49,12 @@ except ImportError:
     TLS_METHOD = TLSv1_METHOD = TLSv1_1_METHOD = TLSv1_2_METHOD = None  # type: ignore[assignment]
 else:
     from twisted.internet.ssl import PrivateCertificate, optionsForClientTLS
-    from twisted.test.ssl_helpers import ClientTLSContext, ServerTLSContext, certPath
-    from twisted.test.test_sslverify import certificatesForAuthorityAndServer
+    from twisted.test.ssl_helpers import (
+        ClientTLSContext,
+        ServerTLSContext,
+        certPath,
+        testingCertificates,
+    )
 
 from twisted.internet.defer import Deferred, gatherResults
 from twisted.internet.error import ConnectionDone, ConnectionLost
@@ -250,7 +254,7 @@ def handshakingClientAndServer(
     @return: 3-tuple of client protocol, server protocol, and a L{pump
         <twisted.test.iosim.IOPump>} that can move the data between the two
     """
-    authCert, serverCert = certificatesForAuthorityAndServer()
+    authCert, serverCert = testingCertificates.authorityAndServer()
     clock = Clock()
 
     @implementer(IHandshakeListener)
@@ -1108,7 +1112,7 @@ class TLSMemoryBIOTests(TestCase):
         origTLSProtos = nObjectsOfType(TLSMemoryBIOProtocol)
         origServerProtos = nObjectsOfType(CloserProtocol)
 
-        authCert, serverCert = certificatesForAuthorityAndServer()
+        authCert, serverCert = testingCertificates.authorityAndServer()
         serverFactory = TLSMemoryBIOFactory(
             serverCert.options(), False, Factory.forProtocol(CloserProtocol)
         )

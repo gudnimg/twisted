@@ -130,9 +130,9 @@ try:
     )
     from twisted.protocols._sni import SNIConnectionCreator
     from twisted.protocols.tls import TLSMemoryBIOFactory, TLSMemoryBIOProtocol
-    from twisted.test.test_sslverify import (
-        certificatesForAuthorityAndServer,
+    from twisted.test.ssl_helpers import (
         makeCertificate,
+        testingCertificates,
     )
 
     testCertificate = Certificate.loadPEM(pemPath.getContent())
@@ -3114,7 +3114,9 @@ class TLSEndpointsTests(EndpointTestCaseMixin, unittest.TestCase):
             "clientServiceIdentity",
             self.serverServiceIdentity,
         )
-        ca, server = certificatesForAuthorityAndServer(self.serverServiceIdentity)
+        ca, server = testingCertificates.authorityAndServer(
+            self.serverServiceIdentity
+        )
 
         self.serverCert = server
         shouldSendServerName = getattr(
@@ -3337,9 +3339,17 @@ class TLSEndpointsTests(EndpointTestCaseMixin, unittest.TestCase):
         private keys are found a warning is logged.
         """
         logObserver = EventLoggingObserver.createWithCleanup(self, globalLogPublisher)
-        untrustedCA, unusedCert = certificatesForAuthorityAndServer(
-            self.serverServiceIdentity
+        unusedAuthority = testingCertificates.authority("unused")
+        unusedCert = unusedAuthority.issue(
+            "Unused Certificate",
+            self.serverServiceIdentity,
         )
+
+        # The unused certificate must not match the active server's private key.
+        self.assertFalse(
+            self.serverCert.privateKey.matches(unusedCert.getPublicKey())
+        )
+
         # superclass (Certificate.dumpPEM) does not include private key in
         # its output, just the certificate
         self.certificatesDirectory.child("ignored-cert.pem").setContent(
@@ -3653,7 +3663,7 @@ class ServerStringTests(unittest.TestCase):
         p = FilePath(tmp)
         p.createDirectory()
         # create a temporary directory with a certificate in it, so we have a default certificate
-        authCert, serverCert = certificatesForAuthorityAndServer()
+        authCert, serverCert = testingCertificates.authorityAndServer()
         p.child("some.pem").setContent(serverCert.dumpPEM())
         server = endpoints.serverFromString(
             reactor,
@@ -4798,10 +4808,10 @@ class WrapClientTLSParserTests(unittest.TestCase):
         # integration test.
 
         # There are good examples of how to construct relevant test-fixture
-        # data in
-        # twisted.test.test_sslverify.certificatesForAuthorityAndServer; that
-        # more directly tests the nuances of this code.  Remember that this
-        # should test both positive and negative cases.
+        # data in twisted.test.ssl_helpers.  The tests in
+        # twisted.test.test_sslverify more directly test the nuances of this
+        # code.  Remember that this should test both positive and negative
+        # cases.
 
         reactor = MemoryReactor()
 

@@ -100,7 +100,7 @@ else:
     from twisted.internet.ssl import optionsForClientTLS
     from twisted.protocols import tls
     from twisted.protocols.tls import TLSMemoryBIOFactory, TLSMemoryBIOProtocol
-    from twisted.test.test_sslverify import certificatesForAuthorityAndServer
+    from twisted.test.ssl_helpers import testingCertificates
 
     @implementer(IOpenSSLTrustRoot)
     class CustomOpenSSLTrustRoot:
@@ -1595,7 +1595,7 @@ class AgentHTTPSTests(TestCase, FakeReactorAndConnectMixin, IntegrationTestingMi
         Wrap L{AgentTestsMixin.integrationTest} with TLS.
         """
         certHostName = hostName.strip(b"[]")
-        authority, server = certificatesForAuthorityAndServer(
+        authority, server = testingCertificates.authorityAndServer(
             certHostName.decode("ascii")
         )
 

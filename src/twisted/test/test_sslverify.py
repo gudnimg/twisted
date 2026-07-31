@@ -8,13 +8,10 @@ Tests for L{twisted.internet._sslverify}.
 
 from __future__ import annotations
 
-import datetime
 import gc
-import itertools
 import textwrap
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from functools import cache
 from typing import Any
 from weakref import ref
 
@@ -44,23 +41,12 @@ from twisted.trial.unittest import SkipTest, SynchronousTestCase, TestCase
 skipSSL = ""
 
 if requireModule("OpenSSL"):
-    import ipaddress
-
     from OpenSSL import SSL
-    from OpenSSL.crypto import FILETYPE_PEM, TYPE_RSA, X509, PKey, get_elliptic_curves
+    from OpenSSL.crypto import FILETYPE_PEM, X509, PKey, get_elliptic_curves
 
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.hazmat.primitives.asymmetric.rsa import (
-        RSAPrivateKey,
-        generate_private_key,
-    )
-    from cryptography.hazmat.primitives.serialization import (
-        Encoding,
-        NoEncryption,
-        PrivateFormat,
-    )
     from cryptography.x509.oid import NameOID
 
     from twisted.internet import ssl
@@ -78,6 +64,11 @@ if not skipSSL:
         SomeConnectionCreator,
         TLSMemoryBIOFactory,
         TLSMemoryBIOProtocol,
+    )
+    from twisted.test.ssl_helpers import (
+        TestingAuthority,
+        makeCertificate,
+        testingCertificates,
     )
 
 # A couple of static PEM-format certificates to be used by various tests.
@@ -124,189 +115,6 @@ A_PEER_CERTIFICATE_PEM = """
 """
 
 A_KEYPAIR = getModule(__name__).filePath.sibling("server.pem").getContent()
-
-
-def counter(counter=itertools.count()):
-    """
-    Each time we're called, return the next integer in the natural numbers.
-    """
-    return next(counter)
-
-
-@cache
-def _keyPair(role: bytes) -> sslverify.KeyPair:
-    """
-    Generate one RSA-2048 key pair for a certificate common name.
-    The role parameter used to provide a unique identifier for the cache.
-    """
-    return sslverify.KeyPair.generate(kind=TYPE_RSA, size=2048)
-
-
-def _generatePrivateKey() -> RSAPrivateKey:
-    return generate_private_key(
-        public_exponent=65537,
-        key_size=4096,
-    )
-
-
-@cache
-def _certificateAuthorityPrivateKey(uniqueName: str) -> RSAPrivateKey:
-    """
-    Return a cached private key for the certificate authority identified by
-    C{uniqueName}.
-    """
-    return _generatePrivateKey()
-
-
-@cache
-def _leafPrivateKey(uniqueName: str) -> RSAPrivateKey:
-    """
-    Return a cached private key for the leaf certificate identified by
-    C{uniqueName}.
-    """
-    return _generatePrivateKey()
-
-
-@cache
-def _certificateData(keyPair: sslverify.KeyPair, **fields: str | bytes) -> bytes:
-    """
-    Create and cache certificate data.
-    """
-    distinguishedName = sslverify.DistinguishedName(**fields)
-    certificateRequest = keyPair.requestObject(distinguishedName)
-    certificate = keyPair.signRequestObject(
-        distinguishedName,
-        certificateRequest,
-        counter(),
-    )
-
-    return certificate.dump()  # type: ignore[no-any-return]
-
-
-def makeCertificate(**kw: str | bytes) -> tuple[PKey, X509]:
-    distinguishedName = sslverify.DistinguishedName(**kw)
-    keyPair = _keyPair(distinguishedName.commonName)
-
-    certificate = keyPair.newCertificate(_certificateData(keyPair, **kw))
-
-    return keyPair.original, certificate.original
-
-
-oneDay = datetime.timedelta(1, 0, 0)
-
-
-@dataclass
-class TestingAuthority:
-    name: x509.Name
-    cert: x509.Certificate
-    key: RSAPrivateKey
-
-    @classmethod
-    def create(
-        cls,
-        uniqueName: str,
-        aroundTimestamp: datetime.datetime = datetime.datetime.today(),
-    ) -> TestingAuthority:
-        commonNameForCA = x509.Name(
-            [x509.NameAttribute(NameOID.COMMON_NAME, "Testing Example CA")]
-        )
-        privateKeyForCA = _certificateAuthorityPrivateKey(uniqueName)
-        publicKeyForCA = privateKeyForCA.public_key()
-        caCertificate = (
-            x509.CertificateBuilder()
-            .subject_name(commonNameForCA)
-            .issuer_name(commonNameForCA)
-            .not_valid_before(aroundTimestamp - oneDay)
-            .not_valid_after(aroundTimestamp + oneDay)
-            .serial_number(x509.random_serial_number())
-            .public_key(publicKeyForCA)
-            .add_extension(
-                x509.BasicConstraints(ca=True, path_length=9),
-                critical=True,
-            )
-            .sign(private_key=privateKeyForCA, algorithm=hashes.SHA256())
-        )
-
-        return TestingAuthority(commonNameForCA, caCertificate, privateKeyForCA)
-
-    def serverCertificate(
-        self, commonName: str, subjects: list[str]
-    ) -> sslverify.PrivateCertificate:
-        privateKeyForServer = _leafPrivateKey(commonName)
-        publicKeyForServer = privateKeyForServer.public_key()
-        commonNameForServer = x509.Name(
-            [x509.NameAttribute(NameOID.COMMON_NAME, commonName)]
-        )
-
-        subjectAlternativeNames: list[x509.IPAddress | x509.DNSName] = []
-        for subject in subjects:
-            try:
-                ipAddress = ipaddress.ip_address(subject)
-            except ValueError:
-                subjectAlternativeNames.append(
-                    x509.DNSName(subject.encode("idna").decode("ascii"))
-                )
-            else:
-                subjectAlternativeNames.append(x509.IPAddress(ipAddress))
-
-        serverBuilder = (
-            x509.CertificateBuilder()
-            .subject_name(commonNameForServer)
-            .not_valid_before(datetime.datetime.today() - oneDay)
-            .not_valid_after(datetime.datetime.today() + oneDay)
-            .serial_number(x509.random_serial_number())
-            .public_key(publicKeyForServer)
-            .add_extension(
-                x509.BasicConstraints(ca=False, path_length=None),
-                critical=True,
-            )
-            .add_extension(
-                x509.SubjectAlternativeName(subjectAlternativeNames),
-                critical=True,
-            )
-        )
-        signedX509 = self.authoritize(serverBuilder)
-        serverCert: sslverify.PrivateCertificate = sslverify.PrivateCertificate.loadPEM(
-            b"\n".join(
-                [
-                    privateKeyForServer.private_bytes(
-                        Encoding.PEM,
-                        PrivateFormat.TraditionalOpenSSL,
-                        NoEncryption(),
-                    ),
-                    signedX509.public_bytes(Encoding.PEM),
-                ]
-            )
-        )
-
-        return serverCert
-
-    def authorityCertificate(self) -> sslverify.Certificate:
-        return sslverify.Certificate.loadPEM(self.cert.public_bytes(Encoding.PEM))
-
-    def authoritize(self, builder: x509.CertificateBuilder) -> x509.Certificate:
-        return builder.issuer_name(self.name).sign(
-            private_key=self.key, algorithm=hashes.SHA256()
-        )
-
-
-def certificatesForAuthorityAndServer(
-    serviceIdentity: str = "example.com",
-) -> tuple[sslverify.Certificate, sslverify.PrivateCertificate]:
-    """
-    Create a self-signed CA certificate and server certificate signed by the
-    CA.
-
-    @param serviceIdentity: The identity (hostname) of the server.
-
-    @return: a 2-tuple of C{(certificate_authority_certificate,
-        server_certificate)}
-    """
-    serverAuthority = TestingAuthority.create("server")
-    return (
-        serverAuthority.authorityCertificate(),
-        serverAuthority.serverCertificate("Testing Example Server", [serviceIdentity]),
-    )
 
 
 class GreetingServer(protocol.Protocol):
@@ -2091,7 +1899,7 @@ class TrustRootTests(TestCase):
         completely invalid / unknown root CA certificates.  This is simply a
         smoke test to make sure that verification is happening at all.
         """
-        caSelfCert, serverCert = certificatesForAuthorityAndServer()
+        caSelfCert, serverCert = testingCertificates.authorityAndServer()
         chainedCert = pathContainingDumpOf(self, serverCert, caSelfCert)
         privateKey = pathContainingDumpOf(self, serverCert.privateKey)
 
@@ -2115,7 +1923,7 @@ class TrustRootTests(TestCase):
         Specifying a L{Certificate} object for L{trustRoot} will result in that
         certificate being the only trust root for a client.
         """
-        caCert, serverCert = certificatesForAuthorityAndServer()
+        caCert, serverCert = testingCertificates.authorityAndServer()
         sProto, cProto, sWrapped, cWrapped, pump = loopbackTLSConnection(
             trustRoot=caCert,
             privateKeyFile=pathContainingDumpOf(self, serverCert.privateKey),
@@ -2216,7 +2024,7 @@ class ServiceIdentityTests(SynchronousTestCase):
             called, will move data between the created client and server
             protocol instances
         """
-        serverAuthority = TestingAuthority.create("server")
+        serverAuthority = testingCertificates.authority("server")
         serverCA = serverAuthority.authorityCertificate()
         serverOptionsKwargs: dict[str, Any] = {}
         passClientCert = None
@@ -2237,26 +2045,18 @@ class ServiceIdentityTests(SynchronousTestCase):
             if not validCertificate and useDefaultTrust and not fakePlatformTrust:
                 untrustedAuthority = serverAuthority
             else:
-                untrustedAuthority = TestingAuthority.create("untrusted")
+                untrustedAuthority = testingCertificates.authority("untrusted")
 
         if clientPresentsCertificate:
             if validClientCertificate:
-                passClientCert = clientAuthority.serverCertificate(
-                    "Client Cert", ["client"]
-                )
+                passClientCert = clientAuthority.issue("Client Cert", "client")
             else:
-                passClientCert = untrustedAuthority.serverCertificate(
-                    "Client Cert", ["client"]
-                )
+                passClientCert = untrustedAuthority.issue("Client Cert", "client")
 
         if validCertificate:
-            serverCert = serverAuthority.serverCertificate(
-                "Valid Cert", [serverHostname]
-            )
+            serverCert = serverAuthority.issue("Valid Cert", serverHostname)
         else:
-            serverCert = untrustedAuthority.serverCertificate(
-                "Invalid Cert", [serverHostname]
-            )
+            serverCert = untrustedAuthority.issue("Invalid Cert", serverHostname)
 
         serverOpts = sslverify.OpenSSLCertificateOptions(
             privateKey=serverCert.privateKey.original,
@@ -2383,8 +2183,8 @@ class ServiceIdentityTests(SynchronousTestCase):
             serverNameCallback=switchToCorrect,
             immediately=False,
         )
-        validCert = conf.authority.serverCertificate(
-            "Correct Cert", ["correct-host.example.com"]
+        validCert = conf.authority.issue(
+            "Correct Cert", "correct-host.example.com"
         )
         cProto, sProto, cWrapped, sWrapped, pump = conf
         pump.flush()
@@ -2626,7 +2426,7 @@ def negotiateProtocol(
     @return: A L{tuple} of the negotiated protocol and the reason the
         connection was lost.
     """
-    caCertificate, serverCertificate = certificatesForAuthorityAndServer()
+    caCertificate, serverCertificate = testingCertificates.authorityAndServer()
     trustRoot = sslverify.OpenSSLCertificateAuthorities([caCertificate.original])
 
     sProto, cProto, sWrapped, cWrapped, pump = loopbackTLSConnectionInMemory(
@@ -2888,7 +2688,7 @@ class MultipleCertificateTrustRootTests(TestCase):
         L{optionsForClientTLS} to accept client connections to a server with
         certificate B where B is signed by A.
         """
-        caCert, serverCert = certificatesForAuthorityAndServer()
+        caCert, serverCert = testingCertificates.authorityAndServer()
 
         trust = sslverify.trustRootFromCertificates([caCert])
 

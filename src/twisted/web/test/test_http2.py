@@ -2984,9 +2984,9 @@ class EndToEndTests(unittest.TestCase):
         """
         Twisted's HTTP/2 server can talk to a third-party HTTP/2 client.
         """
-        from twisted.test.test_sslverify import certificatesForAuthorityAndServer
+        from twisted.test.ssl_helpers import testingCertificates
 
-        _, serverCert = certificatesForAuthorityAndServer("test.local")
+        _, serverCert = testingCertificates.authorityAndServer("test.local")
         resource = Data(b"hello world", "application/octet-stream")
         resource.isLeaf = True
         port = IReactorSSL(reactor).listenSSL(0, Site(resource), serverCert.options())
