@@ -240,6 +240,7 @@ jobs:
             tox-env: 'alldeps-nocov-posix'
             job-name: 'no-coverage'
             skip-coverage: yes
+            trial-reporter: 'timing'
 
           # We still run some tests with coverage,
           # as there are test with specific code branches for pypy.

@@ -415,6 +415,22 @@ class DistTrialRunnerTests(TestCase):
         self.successResultOf(runner.runAsync(suite))
         assert_that(pool._started[0].workers, has_length(numTests))
 
+    def test_startTestRun(self) -> None:
+        """
+        The reporter is notified when a distributed test run begins.
+        """
+        started: list[None] = []
+
+        class RunReporter(TreeReporter):
+            def startTestRun(self) -> None:
+                started.append(None)
+                super().startTestRun()
+
+        runner = self.getRunner(reporterFactory=RunReporter)
+        self.successResultOf(runner.runAsync(self.suite))
+
+        self.assertEqual(started, [None])
+
     def test_runUncleanWarnings(self) -> None:
         """
         Running with the C{unclean-warnings} option makes L{DistTrialRunner} uses
