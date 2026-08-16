@@ -1377,6 +1377,18 @@ class SubunitReporterNotInstalledTests(unittest.SynchronousTestCase):
 class TimingReporterTests(ReporterTests):
     resultFactory: type[itrial.IReporter] = reporter.TimingTextReporter
 
+    def test_reportedDuration(self) -> None:
+        """
+        A duration supplied by a test runner overrides locally measured time.
+        """
+        result = reporter.TimingTextReporter(self.stream)
+        self.patch(result, "_getTime", lambda: 0.0)
+        result.startTest(self.test)
+        result.addDuration(self.test, 1.25)
+        result.stopTest(self.test)
+
+        self.assertIn("(1.250 secs)", self.stream.getvalue())
+
 
 class LoggingReporter(reporter.Reporter):
     """

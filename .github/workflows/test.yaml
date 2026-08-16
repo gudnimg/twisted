@@ -64,6 +64,7 @@ jobs:
       # On Windows, we don't yet enable distributed tests as is not yet
       # supported.
       TRIAL_ARGS: "${{ matrix.trial-args || '-j 4' }}"
+      TRIAL_REPORTER: "${{ matrix.trial-reporter || 'verbose' }}"
     strategy:
       fail-fast: false
       # The matrix is designed to not expand into any job.
@@ -84,6 +85,7 @@ jobs:
         tox-env: ['']
         # We just go with the default arguments.
         trial-args: ['']
+        trial-reporter: ['']
         # By default, tests are executed without disabling IPv6.
         noipv6: ['']
         # By default, tests are executed without extra platform dependencies.
@@ -189,6 +191,7 @@ jobs:
             tox-env: 'alldeps-nocov-posix'
             job-name: 'no-coverage'
             skip-coverage: yes
+            trial-reporter: 'timing'
 
           # We still run some tests with coverage,
           # as there are test with specific code branches for pypy.

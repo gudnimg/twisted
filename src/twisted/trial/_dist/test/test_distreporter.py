@@ -45,6 +45,21 @@ class DistReporterTests(TestCase):
         self.distReporter.stopTest(self.test)
         self.assertNotEqual(self.stream.getvalue(), "")
 
+    def test_addDuration(self) -> None:
+        """
+        A test duration is forwarded only after the test has stopped.
+        """
+        self.distReporter.startTest(self.test)
+        self.distReporter.addDuration(self.test, 1.25)
+        self.assertEqual(self.distReporter.original.collectedDurations, [])
+
+        self.distReporter.stopTest(self.test)
+
+        self.assertEqual(
+            self.distReporter.original.collectedDurations,
+            [(str(self.test), 1.25)],
+        )
+
     def test_forwardedMethods(self) -> None:
         """
         Calling methods of L{DistReporter} add calls to the running queue of
