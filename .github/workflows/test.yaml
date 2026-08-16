@@ -272,7 +272,38 @@ jobs:
           gir1.2-gtk-3.0 \
           xvfb
 
+    - name: PyPy runner information
+      if: matrix.python-version == 'pypy3.11-v7.3.23' && matrix.job-name == 'no-coverage'
+      run: |
+        lscpu
+        nproc
+        python -c "import os; print('cpu_count:', os.cpu_count()); print('affinity:', os.sched_getaffinity(0))"
+        test ! -f /sys/fs/cgroup/cpu.max || cat /sys/fs/cgroup/cpu.max
+        test ! -f /sys/fs/cgroup/cpu.stat || cat /sys/fs/cgroup/cpu.stat
+        cat /proc/pressure/cpu
+        cat /proc/pressure/io
+        cat /proc/pressure/memory
+
+    - name: Test PyPy with runner metrics
+      if: matrix.python-version == 'pypy3.11-v7.3.23' && matrix.job-name == 'no-coverage'
+      run: |
+        vmstat -t 10 > "${RUNNER_TEMP}/twisted-vmstat.log" &
+        monitor_pid=$!
+        test_status=0
+        /usr/bin/time -v \
+          ${{ matrix.tox-wrapper }} tox ${{ matrix.trial-target }} \
+          || test_status=$?
+        kill "${monitor_pid}" || true
+        wait "${monitor_pid}" 2>/dev/null || true
+        cat "${RUNNER_TEMP}/twisted-vmstat.log"
+        test ! -f /sys/fs/cgroup/cpu.stat || cat /sys/fs/cgroup/cpu.stat
+        cat /proc/pressure/cpu
+        cat /proc/pressure/io
+        cat /proc/pressure/memory
+        exit "${test_status}"
+
     - name: Test
+      if: matrix.python-version != 'pypy3.11-v7.3.23' || matrix.job-name != 'no-coverage'
       run: |
         ${{ matrix.tox-wrapper }} tox ${{ matrix.trial-target }}
 
