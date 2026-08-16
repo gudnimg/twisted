@@ -288,7 +288,7 @@ jobs:
     - name: Test PyPy with runner metrics
       if: matrix.python-version == 'pypy3.11-v7.3.23' && matrix.job-name == 'no-coverage'
       run: |
-        vmstat -t 10 > "${RUNNER_TEMP}/twisted-vmstat.log" &
+        stdbuf -oL vmstat -t 10 > "${RUNNER_TEMP}/twisted-vmstat.log" &
         monitor_pid=$!
         test_status=0
         /usr/bin/time -v \
