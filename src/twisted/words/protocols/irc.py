@@ -268,7 +268,7 @@ class IRC(protocol.Protocol):
     def connectionMade(self):
         self.channels = []
         if self.hostname is None:
-            self.hostname = socket.getfqdn()
+            self.hostname = socket.gethostname()
 
     def sendLine(self, line):
         line = line + CR + LF

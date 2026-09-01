@@ -325,6 +325,9 @@ class DistTrialRunner:
         reporter = self._reporterFactory(
             self.stream, self._tracebackFormat, realtime=self._realTimeErrors
         )
+        startTestRun = getattr(reporter, "startTestRun", None)
+        if startTestRun is not None:
+            startTestRun()
         if self._uncleanWarnings:
             reporter = UncleanWarningsReporterWrapper(reporter)
         return self._distReporterFactory(reporter)

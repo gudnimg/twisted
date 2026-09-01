@@ -67,7 +67,11 @@ jobs:
       # Trial distributed jobs enabled to speed up the CI jobs.
       # On Windows, we don't yet enable distributed tests as is not yet
       # supported.
-      TRIAL_ARGS: "${{ matrix.trial-args || '-j 4' }}"
+      TRIAL_ARGS: "${{ matrix.trial-args || '-j auto' }}"
+      # Allow diagnostic jobs to select a reporter or coverage core while
+      # preserving the defaults for all existing jobs.
+      TRIAL_REPORTER: "${{ matrix.trial-reporter || 'verbose' }}"
+      COVERAGE_CORE: "${{ matrix.coverage-core }}"
     strategy:
       fail-fast: false
       # The matrix is designed to not expand into any job.
@@ -88,6 +92,10 @@ jobs:
         tox-env: ['']
         # We just go with the default arguments.
         trial-args: ['']
+        # Use Trial's default reporter.
+        trial-reporter: ['']
+        # Use coverage.py's interpreter-dependent default core.
+        coverage-core: ['']
         # By default, tests are executed without disabling IPv6.
         noipv6: ['']
         # By default, tests are executed without extra platform dependencies.
@@ -169,6 +177,13 @@ jobs:
             job-name: 'macos-15-default-tests'
             tox-env: 'macos-withcov-alldeps'
 
+          # Diagnose where the macOS 15 test suite spends its time.
+          - python-version: '3.14'
+            runs-on: 'macos-15'
+            job-name: 'macos-15-timing-tests'
+            tox-env: 'macos-withcov-alldeps'
+            trial-reporter: 'timing'
+
           # Windows, minimum Python version with select reactor.
           - python-version: '3.10'
             runs-on: 'windows-2022'
@@ -205,6 +220,7 @@ jobs:
             tox-env: 'alldeps-nocov-posix'
             job-name: 'no-coverage'
             skip-coverage: yes
+            trial-reporter: 'timing'
 
           # We still run some tests with coverage,
           # as there are test with specific code branches for pypy.

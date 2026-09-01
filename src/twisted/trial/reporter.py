@@ -80,7 +80,7 @@ class SafeStream:
         return untilConcludes(self.original.write, *a, **kw)
 
 
-@implementer(itrial.IReporter)
+@implementer(itrial.IReporterWithDurations)
 class TestResult(pyunit.TestResult):
     """
     Accumulates the results of several L{twisted.trial.unittest.TestCase}s.
@@ -104,9 +104,9 @@ class TestResult(pyunit.TestResult):
     expectedFailures: list[tuple[itrial.ITestCase, str | Failure, Todo]]  # type: ignore[assignment]
     unexpectedSuccesses: list[tuple[itrial.ITestCase, str]]  # type: ignore[assignment]
     successes: int
-    _testStarted: int | None
+    _testStarted: float | None
     # The duration of the test. It is None until the test completes.
-    _lastTime: int | None
+    _lastTime: float | None
 
     # Make pytest not think this is test class
     __test__ = False
@@ -119,6 +119,7 @@ class TestResult(pyunit.TestResult):
         self.successes = 0
         self._testStarted = None
         self._lastTime = None
+        self.collectedDurations: list[tuple[str, float]] = []
 
     def __repr__(self) -> str:
         return "<%s run=%d errors=%d failures=%d todos=%d dones=%d skips=%d>" % (
@@ -153,6 +154,12 @@ class TestResult(pyunit.TestResult):
         """
         super().startTest(test)
         self._testStarted = self._getTime()
+
+    def addDuration(self, test: pyunit.TestCase, elapsed: float) -> None:
+        """
+        Record a duration measured by the test runner.
+        """
+        self.collectedDurations.append((str(test), elapsed))
 
     def stopTest(self, test):
         """
@@ -449,6 +456,12 @@ class Reporter(TestResult):
             if key not in self._warningCache:
                 self._warningCache.add(key)
                 self._stream.write("%s:%s: %s: %s\n" % key)
+
+    def startTestRun(self) -> None:
+        """
+        Record when a test run begins.
+        """
+        self._startTime = self._getTime()
 
     def startTest(self, test):
         """
@@ -879,12 +892,24 @@ class TimingTextReporter(VerboseTextReporter):
     test to run.
     """
 
+    _reportedTime: float | None = None
+
+    def startTest(self, test):
+        self._reportedTime = None
+        super().startTest(test)
+
+    def addDuration(self, test: pyunit.TestCase, elapsed: float) -> None:
+        super().addDuration(test, elapsed)
+        self._reportedTime = elapsed
+
     def stopTest(self, method):
         """
         Mark the test as stopped, and write the time it took to run the test
         to the stream.
         """
         super().stopTest(method)
+        if self._reportedTime is not None:
+            self._lastTime = self._reportedTime
         self._write("(%.03f secs)\n" % self._lastTime)
 
 
