@@ -198,6 +198,17 @@ jobs:
             tox-env: 'macos-nocov-alldeps'
             skip-coverage: yes
 
+          # Check whether Trial's distributed worker machinery causes the
+          # macOS 15 stalls.  A harmless non-empty argument prevents the
+          # global `-j auto` fallback without enabling any workers.
+          - python-version: '3.14'
+            runs-on: 'macos-15'
+            job-name: 'macos-15-sequential-no-coverage-tests'
+            tox-env: 'macos-nocov-alldeps'
+            skip-coverage: yes
+            trial-args: '--tbformat=plain'
+            trial-reporter: 'timing'
+
           # Windows, minimum Python version with select reactor.
           - python-version: '3.10'
             runs-on: 'windows-2022'
