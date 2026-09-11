@@ -7,7 +7,7 @@ Commands for telling a worker to load tests or run tests.
 @since: 12.3
 """
 
-from twisted.protocols.amp import Boolean, Command, Unicode
+from twisted.protocols.amp import Boolean, Command, Float, Unicode
 
 NativeString = Unicode
 
@@ -18,7 +18,7 @@ class Run(Command):
     """
 
     arguments = [(b"testCase", NativeString())]
-    response = [(b"success", Boolean())]
+    response = [(b"success", Boolean()), (b"duration", Float())]
 
 
 class Start(Command):

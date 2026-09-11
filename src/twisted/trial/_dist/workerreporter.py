@@ -11,6 +11,7 @@ Test reporter forwarding test results over trial distributed AMP commands.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from time import perf_counter
 from types import TracebackType
 from typing import Callable, Literal, TypeVar
 from unittest import TestCase as PyUnitTestCase
@@ -183,6 +184,9 @@ class WorkerReporter(TestResult):
         """
         super().__init__()
         self.ampProtocol = ampProtocol
+
+    def _getTime(self) -> float:
+        return perf_counter()
 
     def gatherReportingResults(self) -> ReportingResults:
         """

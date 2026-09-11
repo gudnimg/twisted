@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from types import TracebackType
 from typing import Union
+from unittest import TestCase as PyUnitTestCase
 
 from zope.interface import implementer
 
@@ -82,6 +83,12 @@ class DistReporter(proxyForInterface(IReporterWithDurations)):  # type: ignore[m
         Queue adding a success.
         """
         self.running[test.id()].append((self.original.addSuccess, test))
+
+    def addDuration(self, test: PyUnitTestCase, elapsed: float) -> None:
+        """
+        Queue adding the duration of a test.
+        """
+        self.running[test.id()].append((self.original.addDuration, test, elapsed))
 
     def stopTest(self, test):
         """

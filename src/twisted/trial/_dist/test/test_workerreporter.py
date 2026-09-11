@@ -7,6 +7,7 @@ Tests for L{twisted.trial._dist.workerreporter}.
 from __future__ import annotations
 
 from collections.abc import Sized
+from io import StringIO
 from unittest import TestCase
 
 from hamcrest import assert_that, equal_to, has_length
@@ -14,8 +15,9 @@ from hamcrest.core.matcher import Matcher
 
 from twisted.internet.defer import Deferred
 from twisted.test.iosim import connectedServerAndClient
+from twisted.trial._dist.distreporter import DistReporter
 from twisted.trial._dist.worker import LocalWorkerAMP, WorkerProtocol
-from twisted.trial.reporter import TestResult
+from twisted.trial.reporter import TestResult, TimingTextReporter
 from twisted.trial.test import erroneous, pyunitcases, sample, skipping
 from twisted.trial.unittest import SynchronousTestCase
 from .matchers import matches_result
@@ -64,6 +66,26 @@ class WorkerReporterTests(SynchronousTestCase):
         L{WorkerReporter} propagates successes.
         """
         self.assertTestRun(sample.FooTest("test_foo"), successes=equal_to(1))
+
+    def test_timing(self) -> None:
+        """
+        The timing reporter displays the duration measured by the worker.
+        """
+        worker, local, pump = connectedServerAndClient(LocalWorkerAMP, WorkerProtocol)
+        workerTimes = iter([2.0, 3.25])
+        self.patch(worker._result, "_getTime", workerTimes.__next__)
+        stream = StringIO()
+        result = TimingTextReporter(stream)
+        self.patch(result, "_getTime", lambda: 0.0)
+        distResult = DistReporter(result)
+
+        deferred = Deferred.fromCoroutine(
+            local.run(sample.FooTest("test_foo"), distResult)
+        )
+        pump.flush()
+
+        assert_that(self.successResultOf(deferred), equal_to({"success": True}))
+        self.assertIn("(1.250 secs)", stream.getvalue())
 
     def test_addError(self) -> None:
         """

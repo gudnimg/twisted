@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Awaitable
+from time import perf_counter
 from typing import Any, Callable, Protocol, TextIO, TypeVar
 from unittest import TestCase
 
@@ -61,6 +62,14 @@ class RunResult(TypedDict):
     success: bool
 
 
+class WorkerRunResult(RunResult):
+    """
+    Represent the worker's response to a L{workercommands.Run} command.
+    """
+
+    duration: float
+
+
 class Worker(Protocol):
     """
     An object that can run actions.
@@ -89,14 +98,19 @@ class WorkerProtocol(AMP):
         self._forceGarbageCollection = forceGarbageCollection
 
     @workercommands.Run.responder
-    async def run(self, testCase: str) -> RunResult:
+    async def run(self, testCase: str) -> WorkerRunResult:
         """
         Run a test case by name.
         """
         with self._result.gatherReportingResults() as results:
             case = self._loader.loadByName(testCase)
             suite = TrialSuite([case], self._forceGarbageCollection)
+            started = perf_counter()
             suite.run(self._result)
+            duration = self._result._lastTime
+
+        if duration is None:
+            duration = perf_counter() - started
 
         allSucceeded = True
         for success, result in await DeferredList(results, consumeErrors=True):
@@ -131,7 +145,7 @@ class WorkerProtocol(AMP):
                     "Additionally, reporting the reporting failure failed."
                 )
 
-        return {"success": allSucceeded}
+        return {"success": allSucceeded, "duration": duration}
 
     @workercommands.Start.responder
     def start(self, directory):
@@ -302,7 +316,9 @@ class LocalWorkerAMP(AMP):
         self._result.startTest(testCase)
         testCaseId = testCase.id()
         try:
-            return await self.callRemote(workercommands.Run, testCase=testCaseId)  # type: ignore[no-any-return]
+            runResult = await self.callRemote(workercommands.Run, testCase=testCaseId)
+            self._result.addDuration(testCase, runResult["duration"])
+            return {"success": runResult["success"]}
         finally:
             self._result.stopTest(testCase)
 
