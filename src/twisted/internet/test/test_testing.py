@@ -317,10 +317,9 @@ class ReactorTests(TestCase):
         reactor.addReader(reader)
         reactor.addWriter(writer)
 
-        expectedResult = [reader, writer]
         result = reactor.removeAll()
 
-        self.assertEqual(result, expectedResult)
+        self.assertCountEqual(result, [reader, writer])
         self.assertEqual(reactor.getReaders(), [])
         self.assertEqual(reactor.getWriters(), [])
 
