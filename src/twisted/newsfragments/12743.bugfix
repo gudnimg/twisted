@@ -1,0 +1,1 @@
+Fix an issue in twisted.internet.testing where MemoryReactor.removeAll method did not return a value like the function it is intended to mock (IReactorFDSet.removeAll).
