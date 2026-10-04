@@ -677,7 +677,7 @@ class IResolver(IResolverSimple):
 
 class IReactorTCP(Interface):
     def listenTCP(
-        port: int,
+        port,
         factory: ServerFactory,
         backlog: int = 50,
         interface: str = "",
